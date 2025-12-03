@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#667eea">
+    
+    <title>PG Management - Login</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="assets/icon-192.png">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
+    
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script>
+        // Initialize Supabase before any query
+        if (window.supabaseClient && window.supabaseClient.init) {
+            window.supabaseClient.init();
+        }
+    </script>
+    
+    <style>
+        /* Mobile optimizations for login page */
+        @media (max-width: 768px) {
+            .login-container {
+                padding: 16px;
+            }
+            .login-card {
+                padding: 24px 20px;
+            }
+            .icon-large {
+                font-size: 48px;
+            }
+            .login-header h1 {
+                font-size: 22px;
+            }
+            .login-header p {
+                font-size: 13px;
+            }
+            .admin-credentials {
+                font-size: 0.85rem;
+            }
+            .credential-item {
+                padding: 8px;
+            }
+        }
+        
+        /* Touch-friendly inputs */
+        input[type="text"],
+        input[type="password"] {
+            -webkit-tap-highlight-color: transparent;
+            min-height: 44px;
+        }
+        
+        button {
+            -webkit-tap-highlight-color: transparent;
+            min-height: 44px;
+        }
+    </style>
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <i class="fas fa-building icon-large pulse"></i>
+                <h1 class="fade-in">PG Management System</h1>
+                <p class="fade-in-delay">Welcome back! Please login to continue</p>
+            </div>
+
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">
+                        <i class="fas fa-user"></i> Username
+                    </label>
+                    <input type="text" id="username" name="username" required 
+                           placeholder="Enter your username" autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <input type="password" id="password" name="password" required 
+                           placeholder="Enter your password" autocomplete="current-password">
+                </div>
+
+                <div class="admin-credentials">
+                    <div class="credentials-header">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Admin Credentials</span>
+                    </div>
+                    <div class="credentials-list">
+                        <div class="credential-item">
+                            <strong>Admin 1:</strong> admin1 / Admin@123
+                        </div>
+                        <div class="credential-item">
+                            <strong>Admin 2:</strong> admin2 / Admin@456
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+
+                <div id="loginError" class="error-message" style="display: none;"></div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    
+    <!-- Service Worker Registration for PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(reg => console.log('Service Worker registered'))
+                    .catch(err => console.log('Service Worker registration failed:', err));
+            });
+        }
+    </script>
+</body>
+</html>

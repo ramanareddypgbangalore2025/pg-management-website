@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#667eea" />
+  
+  <title>Room Status - PG Management</title>
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script>
+    if (window.supabaseClient && window.supabaseClient.init) {
+      window.supabaseClient.init();
+    }
+  </script>
+
+  <style>
+    /* Room Status - Bed Slot Display Styles */
+    .room-card {
+      border: 2px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .room-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 10px;
+    }
+
+    .room-header h3 {
+      margin: 0;
+      font-size: 18px;
+      color: #1e293b;
+    }
+
+    .room-header .room-info {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    /* Sharing Type Box Container */
+    .sharing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .sharing-box {
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 12px;
+      background: white;
+      transition: all 0.3s ease;
+    }
+
+    /* Vacant Box - Light Green */
+    .sharing-box.vacant {
+      background: #f0fdf4;
+      border-color: #22c55e;
+    }
+
+    .sharing-box.vacant .sharing-header {
+      color: #166534;
+    }
+
+    /* Partial Box - Light Yellow */
+    .sharing-box.partial {
+      background: #fffbeb;
+      border-color: #eab308;
+    }
+
+    .sharing-box.partial .sharing-header {
+      color: #854d0e;
+    }
+
+    /* Full Box - Light Red */
+    .sharing-box.full {
+      background: #fef2f2;
+      border-color: #ef4444;
+    }
+
+    .sharing-box.full .sharing-header {
+      color: #991b1b;
+    }
+
+    .sharing-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(0,0,0,0.1);
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .sharing-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .sharing-count {
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(0,0,0,0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Beds Grid - Individual Bed Slots */
+    .beds-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+      gap: 6px;
+    }
+
+    .bed-slot {
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      padding: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 70px;
+      background: white;
+      font-weight: 500;
+    }
+
+    /* Empty Bed - Light Gray */
+    .bed-slot.empty {
+      background: #f3f4f6;
+      border-color: #d1d5db;
+      color: #9ca3af;
+    }
+
+    .bed-slot.empty:hover {
+      background: #e5e7eb;
+      border-color: #9ca3af;
+      transform: translateY(-2px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    /* Occupied Bed - Light Blue */
+    .bed-slot.occupied {
+      background: #dbeafe;
+      border-color: #2563eb;
+      color: #1e40af;
+    }
+
+    .bed-slot.occupied:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    @media (max-width: 768px) {
+      .sharing-grid {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      }
+
+      .bed-slot {
+        min-height: 60px;
+        font-size: 12px;
+      }
+    }
+
+    /* Room Grid Container */
+    .room-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .room-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <i class="fas fa-building"></i>
+      <span>PG Management</span>
+    </div>
+    <ul class="nav-menu">
+      <li><a href="dashboard.html"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+      <li><a href="guest-form.html"><i class="fas fa-user-plus"></i> Add Guest</a></li>
+      <li><a href="guest-list.html"><i class="fas fa-list"></i> Guest List</a></li>
+      <li><a href="room-status.html" class="active"><i class="fas fa-door-open"></i> Room Status</a></li>
+      <li><a href="reports.html"><i class="fas fa-file-alt"></i> Reports</a></li>
+      <li><a href="storage.html"><i class="fas fa-database"></i> Storage</a></li>
+      <li><a href="admin-profile.html"><i class="fas fa-user-cog"></i> Admin Profile</a></li>
+    </ul>
+    <button class="btn btn-logout" onclick="handleLogout()">
+      <i class="fas fa-sign-out-alt"></i> Logout
+    </button>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1><i class="fas fa-door-open"></i> Room Status</h1>
+      <p>View occupancy for each room with individual bed slots</p>
+    </div>
+
+    <!-- Building 1 -->
+    <section class="form-container">
+      <h2>Building-1</h2>
+      <div id="building1Rooms" class="room-grid">
+        <!-- room-status.js will render room cards here -->
+      </div>
+    </section>
+
+    <!-- Building 2 -->
+    <section class="form-container">
+      <h2>Building-2</h2>
+      <div id="building2Rooms" class="room-grid">
+        <!-- room-status.js will render room cards here -->
+      </div>
+    </section>
+  </div>
+
+  <!-- Room details modal -->
+  <div id="roomModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <span class="close" onclick="closeRoomModal()">&times;</span>
+      <div id="roomModalBody"></div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/room-status.js"></script>
+
+  <!-- Service Worker Registration for PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(reg => console.log('Service Worker registered'))
+          .catch(err => console.log('Service Worker registration failed:', err));
+      });
+    }
+
+    function handleLogout() {
+      if (confirm('Are you sure you want to logout?')) {
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.href = '/index.html';
+      }
+    }
+  </script>
+</body>
+</html>

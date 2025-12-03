@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#667eea" />
+    
+    <title>Admin Profile - PG Management</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="assets/icon-192.png" />
+    <link rel="apple-touch-icon" href="assets/icon-192.png" />
+    
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script>
+        if (window.supabaseClient && window.supabaseClient.init) {
+            window.supabaseClient.init();
+        }
+    </script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <i class="fas fa-building"></i>
+            <span>PG Management</span>
+        </div>
+        <ul class="nav-menu">
+            <li><a href="dashboard.html"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+            <li><a href="guest-form.html"><i class="fas fa-user-plus"></i> Add Guest</a></li>
+            <li><a href="guest-list.html"><i class="fas fa-list"></i> Guest List</a></li>
+            <li><a href="room-status.html"><i class="fas fa-door-open"></i> Room Status</a></li>
+            <li><a href="reports.html"><i class="fas fa-file-alt"></i> Reports</a></li>
+            <li><a href="storage.html"><i class="fas fa-database"></i> Storage</a></li>
+            <li><a href="admin-profile.html" class="active"><i class="fas fa-user-cog"></i> Admin Profile</a></li>
+        </ul>
+        <button class="btn btn-logout" onclick="handleLogout()">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-user-cog"></i> Admin Profile</h1>
+            <p>System administrators and login history</p>
+        </div>
+
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h3>Admin 1</h3>
+                <p><strong>Username:</strong> admin1</p>
+                <p><strong>Password:</strong> Admin@123</p>
+                <p><strong>Role:</strong> Primary Administrator</p>
+                <p><i class="fas fa-sign-in-alt"></i> 4 Total Logins</p>
+                <p><i class="fas fa-clock"></i> Last Login: 18/11/2025, 21:06:05</p>
+            </div>
+
+            <div class="admin-card">
+                <h3>Admin 2</h3>
+                <p><strong>Username:</strong> admin2</p>
+                <p><strong>Password:</strong> Admin@456</p>
+                <p><strong>Role:</strong> Secondary Administrator</p>
+                <p><i class="fas fa-sign-in-alt"></i> 0 Total Logins</p>
+                <p><i class="fas fa-clock"></i> Last Login: Never</p>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-header">
+                <h2><i class="fas fa-history"></i> Login History</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="guest-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Admin</th>
+                            <th>Login Time</th>
+                            <th>Logout Time</th>
+                            <th>Session Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="loginHistoryBody">
+                        <tr>
+                            <td>1</td>
+                            <td>admin1</td>
+                            <td>18/11/2025, 21:06:05</td>
+                            <td>Active</td>
+                            <td>Active</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/admin-profile.js"></script>
+    
+    <!-- Service Worker Registration for PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(reg => console.log('Service Worker registered'))
+                    .catch(err => console.log('Service Worker registration failed:', err));
+            });
+        }
+    </script>
+</body>
+</html>
