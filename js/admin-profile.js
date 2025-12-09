@@ -23,8 +23,14 @@ async function loadAdminData() {
 
 // Update admin stats
 function updateAdminStats() {
-    const admin1Logins = loginHistory.filter(h => h.username === 'admin1');
-    const admin2Logins = loginHistory.filter(h => h.username === 'admin2');
+    // Sort each admin's logins by login_time DESC so [0] is always latest
+    const admin1Logins = loginHistory
+        .filter(h => h.username === 'admin1')
+        .sort((a, b) => new Date(b.login_time) - new Date(a.login_time));
+
+    const admin2Logins = loginHistory
+        .filter(h => h.username === 'admin2')
+        .sort((a, b) => new Date(b.login_time) - new Date(a.login_time));
 
     document.getElementById('admin1Logins').textContent = admin1Logins.length;
     document.getElementById('admin2Logins').textContent = admin2Logins.length;

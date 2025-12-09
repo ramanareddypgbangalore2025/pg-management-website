@@ -1,8 +1,163 @@
 // ============================================
-// Room Status Module - Sharing-wise Grid Display with Individual Bed Slots
+// Room Status Module - Per-Room Sharing Capacity
 // ============================================
 
 let allGuests = [];
+
+// ============================================
+// Minimum Beds Per Sharing Type (FIXED)
+// ============================================
+// These are the minimum beds required for each sharing type
+// Even if room is vacant, capacity cannot go below these values
+// Can extend up to 5 beds max per sharing type
+
+const MIN_CAPACITY_PER_SHARING = {
+  1: 1, // 1 Sharing: must keep at least 1 bed
+  2: 2, // 2 Sharing: must keep at least 2 beds
+  3: 3  // 3 Sharing: must keep at least 3 beds
+};
+
+// ============================================
+// Per-Room Capacity Management
+// ============================================
+
+// Load per-room capacity from localStorage or use default
+function getRoomCapacity() {
+  try {
+    const stored = localStorage.getItem('ROOM_CAPACITY');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Failed to load stored room capacity:', e);
+  }
+  // Fallback to default from config
+  return window.DEFAULT_ROOM_CAPACITY || initializeDefaultCapacity();
+}
+
+// Initialize default capacity based on ROOM_MAP
+function initializeDefaultCapacity() {
+  const defaultCap = {};
+  
+  const ROOM_MAP = {
+    'Building-1': ['G01', '101', '102', '103', '201', '202', '203', '301', '302', '303', '401'],
+    'Building-2': ['G02', '104', '105', '106', '204', '205', '206', '304', '305', '306', '402']
+  };
+  
+  for (const building in ROOM_MAP) {
+    defaultCap[building] = {};
+    ROOM_MAP[building].forEach(roomNo => {
+      defaultCap[building][roomNo] = { 1: 1, 2: 2, 3: 3 };
+    });
+  }
+  
+  return defaultCap;
+}
+
+// Save per-room capacity to localStorage and DB
+async function saveRoomCapacity(capacityObj) {
+  try {
+    // Save to localStorage for instant UI update
+    localStorage.setItem('ROOM_CAPACITY', JSON.stringify(capacityObj));
+    
+    // Also save to DB settings table (optional, for persistence across devices)
+    if (window.DB && typeof DB.saveSettings === 'function') {
+      await DB.saveSettings('ROOM_CAPACITY', capacityObj);
+    }
+  } catch (e) {
+    console.error('Error saving room capacity:', e);
+  }
+}
+
+// Count occupied beds for a specific (building, room, sharing)
+function countGuests(building, roomNo, sharingType) {
+  return allGuests.filter(g =>
+    g.building === building &&
+    g.roomNo === roomNo &&
+    parseInt(g.sharingType) === sharingType &&
+    g.roomVacate !== 'Yes'
+  ).length;
+}
+
+// Increase capacity for a specific (building, room, sharing) - max 5
+async function increaseCapacity(building, roomNo, sharingType) {
+  const roomCapacity = getRoomCapacity();
+  const currentValue = roomCapacity[building]?.[roomNo]?.[sharingType] || 1;
+  
+  if (currentValue < 5) {
+    roomCapacity[building][roomNo][sharingType] = currentValue + 1;
+    await saveRoomCapacity(roomCapacity);
+    showRoomCapacityNotification(`✓ ${building} ${roomNo} (${sharingType} Sharing): ${currentValue + 1} beds`, 'success');
+    await loadRoomStatus(); // Refresh room display
+  } else {
+    alert(`Maximum 5 beds allowed for ${building} ${roomNo} (${sharingType} Sharing)`);
+  }
+}
+
+// Decrease capacity for a specific (building, room, sharing)
+// ✅ NEW: Check minimum beds per sharing type + occupancy
+async function decreaseCapacity(building, roomNo, sharingType) {
+  const roomCapacity = getRoomCapacity();
+  const currentValue = roomCapacity[building]?.[roomNo]?.[sharingType] || 1;
+  
+  // Get minimum allowed for this sharing type
+  const minAllowed = MIN_CAPACITY_PER_SHARING[sharingType] ?? 1;
+
+  // Block if already at or below minimum for this share type
+  if (currentValue <= minAllowed) {
+    alert(`Minimum ${minAllowed} bed(s) are required for ${sharingType} Sharing in ${building} ${roomNo}.`);
+    return;
+  }
+
+  const occupied = countGuests(building, roomNo, sharingType);
+  const newCapacity = currentValue - 1;
+
+  // Block if new capacity would be less than occupied guests
+  if (newCapacity < occupied) {
+    alert(`❌ Already ${occupied} guest(s) are occupied in ${building} ${roomNo} (${sharingType} Sharing), so beds cannot be removed.`);
+    return;
+  }
+
+  roomCapacity[building][roomNo][sharingType] = newCapacity;
+  await saveRoomCapacity(roomCapacity);
+  showRoomCapacityNotification(`✓ ${building} ${roomNo} (${sharingType} Sharing): ${newCapacity} bed(s)`, 'success');
+  await loadRoomStatus(); // Refresh room display
+}
+
+// Show temporary notification for capacity changes
+function showRoomCapacityNotification(message, type) {
+  const notifId = 'capacity-notification';
+  let notif = document.getElementById(notifId);
+  
+  if (!notif) {
+    notif = document.createElement('div');
+    notif.id = notifId;
+    notif.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${type === 'success' ? '#22c55e' : '#ef4444'};
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      z-index: 10000;
+      font-weight: 600;
+      animation: slideIn 0.3s ease;
+    `;
+    document.body.appendChild(notif);
+  }
+  
+  notif.textContent = message;
+  notif.style.display = 'block';
+  
+  setTimeout(() => {
+    notif.style.display = 'none';
+  }, 3000);
+}
+
+// ============================================
+// Room Status Display Logic
+// ============================================
 
 // Reuse same building -> rooms mapping as guest-form.js
 const ROOM_MAP = {
@@ -20,13 +175,6 @@ const ROOM_MAP = {
         '304', '305', '306',
         '402'
     ]
-};
-
-// Capacity per sharing type (sharingType is stored as INTEGER: 1, 2, 3)
-const SHARING_CAPACITY = {
-    1: 1, // 1 Sharing
-    2: 2, // 2 Sharing
-    3: 3  // 3 Sharing
 };
 
 // Sharing type display labels
@@ -55,6 +203,7 @@ async function loadRoomStatus() {
 function renderBuilding(building, containerId, activeGuests) {
     const container = document.getElementById(containerId);
     const rooms = ROOM_MAP[building] || [];
+    const roomCapacity = getRoomCapacity();
 
     let html = '';
 
@@ -70,7 +219,9 @@ function renderBuilding(building, containerId, activeGuests) {
             // Count guests in this room with THIS specific sharing type
             const sharingGuests = roomGuests.filter(g => parseInt(g.sharingType) === sharingType);
             const occupiedCount = sharingGuests.length;
-            const maxCapacity = SHARING_CAPACITY[sharingType];
+            
+            // ✅ Get capacity for THIS specific room + sharing type
+            const maxCapacity = roomCapacity[building]?.[roomNo]?.[sharingType] ?? 1;
 
             // Determine overall status
             let sharingStatusClass = 'vacant';
@@ -117,11 +268,19 @@ function renderBuilding(building, containerId, activeGuests) {
                 `;
             }
 
+            // ✅ Add +/- buttons per room + sharing type
+            const increaseBtn = `<button class="btn btn-sm" onclick="increaseCapacity('${building}', '${roomNo}', ${sharingType})" title="Add bed" style="padding: 4px 8px; margin-right: 4px;">+</button>`;
+            const decreaseBtn = `<button class="btn btn-sm" onclick="decreaseCapacity('${building}', '${roomNo}', ${sharingType})" title="Remove bed" style="padding: 4px 8px;">−</button>`;
+
             sharingGridHtml += `
                 <div class="sharing-box ${sharingStatusClass}">
                     <div class="sharing-header">
                         <div class="sharing-title">${label}</div>
                         <div class="sharing-count">${occupiedCount}/${maxCapacity}</div>
+                        <div class="sharing-controls" style="display: flex; gap: 4px;">
+                            ${increaseBtn}
+                            ${decreaseBtn}
+                        </div>
                     </div>
                     <div class="beds-grid">
                         ${bedSlotsHtml}
@@ -165,7 +324,8 @@ function showBedDetails(building, roomNo, sharingType, bedSlot) {
     const modalBody = document.getElementById('roomModalBody');
 
     const label = SHARING_LABELS[sharingType];
-    const maxCapacity = SHARING_CAPACITY[sharingType];
+    const roomCapacity = getRoomCapacity();
+    const maxCapacity = roomCapacity[building]?.[roomNo]?.[sharingType] ?? 1;
     const guest = sharingGuests[bedSlot];
 
     if (!guest) {
@@ -261,6 +421,8 @@ function closeRoomModal() {
 // Expose modal functions globally for HTML
 window.showBedDetails = showBedDetails;
 window.closeRoomModal = closeRoomModal;
+window.increaseCapacity = increaseCapacity;
+window.decreaseCapacity = decreaseCapacity;
 
 // Modal: click outside to close
 window.onclick = function (event) {
@@ -268,9 +430,13 @@ window.onclick = function (event) {
     if (event.target === modal) closeRoomModal();
 };
 
-// Initialize room status on page load (with small delay)
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(loadRoomStatus, 500);
+// Initialize room status on page load
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await loadRoomStatus();
+    } catch (error) {
+        console.error('Error initializing room status:', error);
+    }
 });
 
 // Auto-refresh room grid every 30s for real-time UI

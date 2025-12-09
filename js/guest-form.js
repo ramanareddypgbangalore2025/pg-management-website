@@ -1,5 +1,6 @@
 // ============================================
-// Guest Form Module WITH ROOM CAPACITY VALIDATION
+// Guest Form Module WITH PER-ROOM CAPACITY VALIDATION
+// AND JOINING-DATE-BASED PAYMENT CYCLE
 // ============================================
 
 let isEditMode = false;
@@ -24,13 +25,6 @@ const ROOM_MAP = {
   ]
 };
 
-// Capacity limits for sharing types (KEY = display name, VALUE = max persons)
-const CAPACITY_LIMITS = {
-  '1 Sharing': 1,
-  '2 Sharing': 2,
-  '3 Sharing': 3
-};
-
 // Mapping: Display Name -> Database Value (number)
 const SHARING_TYPE_MAP = {
   '1 Sharing': 1,
@@ -45,12 +39,26 @@ const SHARING_TYPE_DISPLAY = {
   3: '3 Sharing'
 };
 
+// ✅ Load per-room capacity from localStorage or use default
+function getRoomCapacity() {
+  try {
+    const stored = localStorage.getItem('ROOM_CAPACITY');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Failed to load stored room capacity:', e);
+  }
+  // Fallback to default from config
+  return window.DEFAULT_ROOM_CAPACITY || {};
+}
+
 // Initialize form
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Load all guests from database
     allGuests = await DB.getGuests();
-    
+
     // Check for edit mode
     const urlParams = new URLSearchParams(window.location.search);
     const guestId = urlParams.get('id');
@@ -60,14 +68,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('formTitle').textContent = 'Edit Guest';
       await loadGuestData(guestId);
     }
-    
+
     // Set up form listeners
     setupFormListeners();
-    
-    // Set default joining date to today
+
+    // Set default joining date and payment date to today for new guest
     if (!isEditMode) {
       document.getElementById('joiningDate').valueAsDate = new Date();
       document.getElementById('monthlyPaymentDate').valueAsDate = new Date();
+      // Calculate initial due date and days left
+      calculateDueDate();
     }
   } catch (error) {
     console.error('Error initializing form:', error);
@@ -81,10 +91,10 @@ function setupFormListeners() {
   document.getElementById('building').addEventListener('change', function () {
     loadRooms(this.value);
   });
-  
+
   // Room selection - validate capacity
   document.getElementById('roomNo').addEventListener('change', validateRoomCapacity);
-  
+
   // Sharing type change - validate capacity
   document.getElementById('sharingType').addEventListener('change', validateRoomCapacity);
 
@@ -99,93 +109,134 @@ function setupFormListeners() {
 // Load rooms based on building
 function loadRooms(building) {
   const roomSelect = document.getElementById('roomNo');
-  roomSelect.innerHTML = '<option value="">Select Room</option>';
+  roomSelect.innerHTML = '';
+
   if (!building || !ROOM_MAP[building]) return;
-  
+
   ROOM_MAP[building].forEach(room => {
     const option = document.createElement('option');
     option.value = room;
     option.textContent = room;
     roomSelect.appendChild(option);
   });
-  
+
   // Clear previous validation
   validateRoomCapacity();
 }
 
-// ✅ VALIDATE ROOM CAPACITY - MAIN FIX
+// ✅ VALIDATE ROOM CAPACITY - WITH PER-ROOM CHECKING
 function validateRoomCapacity() {
   const roomNo = document.getElementById('roomNo').value;
   const sharingTypeDisplay = document.getElementById('sharingType').value; // Display name from dropdown
   const building = document.getElementById('building').value;
   const alertDiv = document.getElementById('capacityAlert');
   const submitBtn = document.querySelector('button[type="submit"]');
-  
+
   // Clear alert if not enough selections
   if (!roomNo || !sharingTypeDisplay || !building) {
     if (alertDiv) alertDiv.innerHTML = '';
+    if (submitBtn) submitBtn.disabled = false;
     return true;
   }
-  
-  // Get max capacity for this sharing type
-  const maxCapacity = CAPACITY_LIMITS[sharingTypeDisplay] || 0;
-  
+
+  // ✅ Get max capacity for THIS SPECIFIC room + sharing type
+  const roomCapacity = getRoomCapacity();
+  const sharingType = SHARING_TYPE_MAP[sharingTypeDisplay];
+  const maxCapacity = roomCapacity[building]?.[roomNo]?.[sharingType] ?? 1;
+
   // Count current occupants in this room with SAME sharing type (excluding current edit guest)
-  // NOTE: Compare with both display name AND numeric value since DB might have either
   const currentOccupants = allGuests.filter(guest => {
     const isSameRoom = guest.roomNo === roomNo;
     const isSameBuilding = guest.building === building;
-    
+
     // Check if sharing type matches (handle both string and number formats)
-    const guestSharing = typeof guest.sharingType === 'number' 
-      ? SHARING_TYPE_DISPLAY[guest.sharingType] 
+    const guestSharing = typeof guest.sharingType === 'number'
+      ? SHARING_TYPE_DISPLAY[guest.sharingType]
       : guest.sharingType;
     const isSameSharing = guestSharing === sharingTypeDisplay;
-    
+
     const isNotCurrentGuest = !isEditMode || guest.id !== currentGuestId;
-    
-    return isSameRoom && isSameBuilding && isSameSharing && isNotCurrentGuest;
+    const isNotVacated = guest.roomVacate !== 'Yes';
+
+    return isSameRoom && isSameBuilding && isSameSharing && isNotCurrentGuest && isNotVacated;
   }).length;
-  
+
   // ✅ CHECK IF ROOM IS AT CAPACITY
   if (currentOccupants >= maxCapacity) {
     // Show error alert
     if (alertDiv) {
       alertDiv.innerHTML = `
-        <div style="background: #fee; padding: 12px; border-radius: 8px; border-left: 4px solid #f44; color: #c33; margin-bottom: 15px;">
-          <strong>⚠️ Room is Full!</strong>
-          <br/>
-          <strong>${sharingTypeDisplay}:</strong> Maximum ${maxCapacity} person(s) allowed
-          <br/>
-          <strong>Current occupants:</strong> ${currentOccupants}/${maxCapacity} ❌
-          <br/>
-          <br/>
-          ✅ <strong>Solution:</strong>
-          <ul style="margin: 8px 0;">
-            <li>Select a different room with available space</li>
-            <li>OR select a sharing type with higher capacity</li>
-          </ul>
+        <div style="background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 6px; border-left: 4px solid #dc2626; margin-bottom: 12px;">
+          <strong>❌ Room Full</strong><br>
+          ${building} - Room ${roomNo} (${sharingTypeDisplay}) has reached maximum capacity (${currentOccupants}/${maxCapacity} beds occupied).
         </div>
       `;
     }
-    
-    // Disable submit button
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.style.opacity = '0.5';
-      submitBtn.title = 'Room is at full capacity. Please select another room.';
-    }
-    
+
+    // Disable form submission
+    if (submitBtn) submitBtn.disabled = true;
     return false;
-  } else {
-    // Clear alert and enable submit
-    if (alertDiv) alertDiv.innerHTML = '';
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.style.opacity = '1';
-      submitBtn.title = '';
+  }
+
+  // Show warning if room is almost full
+  const remainingBeds = maxCapacity - currentOccupants - 1; // -1 for this new guest
+  if (remainingBeds === 0) {
+    if (alertDiv) {
+      alertDiv.innerHTML = `
+        <div style="background: #fef3c7; color: #92400e; padding: 12px; border-radius: 6px; border-left: 4px solid #f59e0b; margin-bottom: 12px;">
+          <strong>⚠️ Last Bed</strong><br>
+          This is the last available bed in ${building} - Room ${roomNo} (${sharingTypeDisplay}).
+        </div>
+      `;
     }
-    return true;
+  } else {
+    // Clear alert
+    if (alertDiv) alertDiv.innerHTML = '';
+  }
+
+  // Enable form submission
+  if (submitBtn) submitBtn.disabled = false;
+  return true;
+}
+
+// Load guest data for edit mode
+async function loadGuestData(guestId) {
+  try {
+    const guest = allGuests.find(g => g.id === guestId);
+    if (!guest) {
+      showAlert('Guest not found', 'danger');
+      return;
+    }
+
+    // Populate form fields
+    document.getElementById('name').value = guest.name || '';
+    document.getElementById('building').value = guest.building || '';
+    document.getElementById('mobile').value = guest.mobile || '';
+    document.getElementById('joiningDate').valueAsDate = guest.joiningDate ? new Date(guest.joiningDate) : new Date();
+    document.getElementById('advancePayment').value = guest.advancePayment || '';
+    document.getElementById('paymentAmount').value = guest.paymentAmount || '';
+    document.getElementById('monthlyPaymentDate').valueAsDate = guest.monthlyPaymentDate
+      ? new Date(guest.monthlyPaymentDate)
+      : new Date();
+    document.getElementById('monthlyPaymentStatus').value = guest.monthlyPaymentStatus || 'Pending';
+    document.getElementById('remarks').value = guest.remarks || '';
+
+    // Load rooms for the selected building
+    loadRooms(guest.building);
+
+    // Set room and sharing type (these trigger validateRoomCapacity)
+    document.getElementById('roomNo').value = guest.roomNo || '';
+
+    const sharingDisplay = typeof guest.sharingType === 'number'
+      ? SHARING_TYPE_DISPLAY[guest.sharingType]
+      : guest.sharingType;
+    document.getElementById('sharingType').value = sharingDisplay || '';
+
+    // Calculate and set due date + days left
+    calculateDueDate();
+  } catch (error) {
+    console.error('Error loading guest data:', error);
+    showAlert('Error loading guest data', 'danger');
   }
 }
 
@@ -193,52 +244,49 @@ function validateRoomCapacity() {
 function calculateDueDate() {
   const joiningDateStr = document.getElementById('joiningDate').value;
   if (!joiningDateStr) return;
-  
+
   const joiningDate = new Date(joiningDateStr);
   if (isNaN(joiningDate)) return;
-  
-  // Cycle day is always taken from joining date (1..31)
+
+  // 1) Cycle day is always from joining date (1..31)
   const cycleDay = joiningDate.getDate();
-  const status = document.getElementById('monthlyPaymentStatus').value;
+
+  // 2) If there is a Monthly Payment Date, always use it as base.
+  //    This covers: new guest after first payment, early payment,
+  //    paid after breach, etc. If no payment date, use joining date.
   const paymentDateStr = document.getElementById('monthlyPaymentDate').value;
-  
   let base;
-  
-  // For Paid with a payment date, move to next cycle from payment date.
-  // Otherwise (new/unpaid cycle), use joining date.
-  if (status === 'Paid' && paymentDateStr) {
+  if (paymentDateStr) {
     base = new Date(paymentDateStr);
     if (isNaN(base)) base = joiningDate;
   } else {
     base = joiningDate;
   }
-  
-  // Move to next calendar month from base
+
+  // 3) Move to next calendar month from base
   const next = new Date(base);
   next.setMonth(next.getMonth() + 1);
-  
-  // Last valid day of that next month
+
+  // 4) Clamp to last valid day of that month (handles 29/30/31, February, etc.)
   const lastDayOfNextMonth = new Date(
     next.getFullYear(),
     next.getMonth() + 1,
     0
-  ).getDate(); // 28, 29, 30 or 31
-  
-  // Clamp to last day if needed (handles 31st, Feb, etc.)
+  ).getDate();
   next.setDate(Math.min(cycleDay, lastDayOfNextMonth));
-  
-  // Set upcoming due date
+
+  // 5) Write Upcoming Payment Due Date
   document.getElementById('upcomingPaymentDueDate').value =
     next.toISOString().split('T')[0];
-  
-  // Days left
+
+  // 6) Days Left
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   next.setHours(0, 0, 0, 0);
-  
+
   const diffTime = next - today;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
+
   if (diffDays < 0) {
     document.getElementById('daysLeft').value = `${Math.abs(diffDays)} days overdue`;
   } else if (diffDays === 0) {
@@ -248,188 +296,95 @@ function calculateDueDate() {
   }
 }
 
-// Load guest data for editing
-async function loadGuestData(guestId) {
-  try {
-    const guest = await DB.getGuestById(guestId);
-    if (guest) {
-      document.getElementById('guestId').value = guest.id;
-      document.getElementById('joiningDate').value = guest.joiningDate;
-      document.getElementById('building').value = guest.building;
-      
-      // Load rooms for the building and set selected room
-      loadRooms(guest.building);
-      setTimeout(() => {
-        document.getElementById('roomNo').value = guest.roomNo;
-      }, 100);
-      
-      // Convert numeric sharingType to display name if needed
-      const sharingDisplay = typeof guest.sharingType === 'number'
-        ? SHARING_TYPE_DISPLAY[guest.sharingType]
-        : guest.sharingType;
-      document.getElementById('sharingType').value = sharingDisplay;
-      
-      document.getElementById('name').value = guest.name;
-      document.getElementById('mobile').value = guest.mobile;
-      document.getElementById('advancePayment').value = guest.advancePayment;
-      document.getElementById('paymentAmount').value = guest.paymentAmount;
-      document.getElementById('monthlyPaymentStatus').value = guest.monthlyPaymentStatus;
-      document.getElementById('monthlyPaymentDate').value = guest.monthlyPaymentDate || '';
-      document.getElementById('upcomingPaymentDueDate').value = guest.upcomingPaymentDueDate || '';
-      document.getElementById('daysLeft').value = guest.daysLeft || '';
-      document.getElementById('roomVacate').value = guest.roomVacate;
-      document.getElementById('remarks').value = guest.remarks || '';
-      
-      // Recalculate based on current data
-      calculateDueDate();
-      
-      // Validate capacity on load
-      setTimeout(validateRoomCapacity, 200);
-    }
-  } catch (error) {
-    console.error('Error loading guest data:', error);
-    showAlert('Error loading guest data', 'danger');
-  }
-}
 
 // Handle form submission
 async function handleFormSubmit(e) {
   e.preventDefault();
-  
-  // Validate capacity before submit
+
+  // Validate capacity before submission
   if (!validateRoomCapacity()) {
-    showAlert('Room is at full capacity. Please select another room.', 'danger');
+    showAlert('Cannot add guest - room is at capacity', 'danger');
     return;
   }
-  
-  // Make sure due date / daysLeft reflect current dates and status
-  calculateDueDate();
-  
-  const status = document.getElementById('monthlyPaymentStatus').value;
-  const sharingTypeDisplay = document.getElementById('sharingType').value;
-  
-  // ✅ CONVERT DISPLAY NAME TO DATABASE VALUE (NUMBER)
-  const sharingTypeValue = SHARING_TYPE_MAP[sharingTypeDisplay] || 1;
-  
-  const formData = {
-    joiningDate: document.getElementById('joiningDate').value,
-    building: document.getElementById('building').value,
-    roomNo: document.getElementById('roomNo').value,
-    sharingType: sharingTypeValue, // ✅ Send as NUMBER, not string
-    name: document.getElementById('name').value,
-    mobile: document.getElementById('mobile').value,
-    advancePayment: parseFloat(document.getElementById('advancePayment').value),
-    paymentAmount: parseFloat(document.getElementById('paymentAmount').value),
-    monthlyPaymentStatus: status,
-    monthlyPaymentDate: document.getElementById('monthlyPaymentDate').value || null,
-    upcomingPaymentDueDate: document.getElementById('upcomingPaymentDueDate').value || null,
-    daysLeft: document.getElementById('daysLeft').value || null,
-    roomVacate: document.getElementById('roomVacate').value,
-    remarks: document.getElementById('remarks').value || null,
-    isCurrentCycleClosed: status === 'Paid'
-  };
-  
+
   try {
-    let result;
+    const guestData = {
+      name: document.getElementById('name').value,
+      building: document.getElementById('building').value,
+      roomNo: document.getElementById('roomNo').value,
+      mobile: document.getElementById('mobile').value,
+      sharingType: SHARING_TYPE_MAP[document.getElementById('sharingType').value],
+      joiningDate: document.getElementById('joiningDate').value,
+      advancePayment: parseFloat(document.getElementById('advancePayment').value) || 0,
+      paymentAmount: parseFloat(document.getElementById('paymentAmount').value) || 0,
+      monthlyPaymentDate: document.getElementById('monthlyPaymentDate').value,
+      upcomingPaymentDueDate: document.getElementById('upcomingPaymentDueDate').value,
+      monthlyPaymentStatus: document.getElementById('monthlyPaymentStatus').value,
+      roomVacate: document.getElementById('roomVacate').value || 'No',
+      remarks: document.getElementById('remarks').value
+    };
+
+    // Validate required fields
+    if (!guestData.name || !guestData.building || !guestData.roomNo || !guestData.mobile) {
+      showAlert('Please fill in all required fields', 'danger');
+      return;
+    }
+
     if (isEditMode) {
-      result = await DB.updateGuest(currentGuestId, formData);
+      // Update existing guest
+      await DB.updateGuest(currentGuestId, guestData);
+      showAlert(`Guest "${guestData.name}" updated successfully!`, 'success');
     } else {
-      result = await DB.addGuest(formData);
+      // Add new guest
+      await DB.addGuest(guestData);
+      showAlert(`Guest "${guestData.name}" added successfully!`, 'success');
+      document.getElementById('guestForm').reset();
+      document.getElementById('joiningDate').valueAsDate = new Date();
+      document.getElementById('monthlyPaymentDate').valueAsDate = new Date();
+      calculateDueDate();
     }
-    
-    if (result.success) {
-      showAlert(isEditMode ? 'Guest updated successfully!' : 'Guest added successfully!', 'success');
-      setTimeout(() => {
-        window.location.href = 'guest-list.html';
-      }, 1500);
-    } else {
-      showAlert('Error: ' + result.error, 'danger');
-    }
+
+    // Refresh guest list and reset capacity validation
+    allGuests = await DB.getGuests();
+    validateRoomCapacity();
+
+    // Redirect to guest list after success
+    setTimeout(() => {
+      window.location.href = 'guest-list.html';
+    }, 1500);
   } catch (error) {
-    console.error('Form submission error:', error);
-    showAlert('An error occurred while saving guest data!', 'danger');
+    console.error('Error saving guest:', error);
+    showAlert('Error saving guest data: ' + error.message, 'danger');
   }
 }
 
 // Show alert message
-function showAlert(message, type = 'info') {
+function showAlert(message, type) {
   const alertDiv = document.getElementById('alertMessage');
   if (!alertDiv) return;
-  
-  const bgColor = {
-    'success': '#d4edda',
-    'danger': '#f8d7da',
-    'warning': '#fff3cd',
-    'info': '#d1ecf1'
-  }[type] || '#d1ecf1';
-  
-  const textColor = {
-    'success': '#155724',
-    'danger': '#721c24',
-    'warning': '#856404',
-    'info': '#0c5460'
-  }[type] || '#0c5460';
-  
-  const borderColor = {
-    'success': '#c3e6cb',
-    'danger': '#f5c6cb',
-    'warning': '#ffeeba',
-    'info': '#bee5eb'
-  }[type] || '#bee5eb';
-  
+
+  const bgColor = type === 'success' ? '#dcfce7' : type === 'warning' ? '#fef3c7' : '#fee2e2';
+  const textColor = type === 'success' ? '#166534' : type === 'warning' ? '#92400e' : '#991b1b';
+  const borderColor = type === 'success' ? '#22c55e' : type === 'warning' ? '#f59e0b' : '#dc2626';
+  const icon = type === 'success' ? '✓' : type === 'warning' ? '⚠️' : '❌';
+
   alertDiv.innerHTML = `
-    <div style="background: ${bgColor}; color: ${textColor}; padding: 12px; border-radius: 8px; border: 1px solid ${borderColor}; margin-bottom: 15px;">
+    <div style="background: ${bgColor}; color: ${textColor}; padding: 12px; border-radius: 6px; border-left: 4px solid ${borderColor}; margin-bottom: 12px;">
+      <strong>${icon} ${type.charAt(0).toUpperCase() + type.slice(1)}</strong><br>
       ${message}
     </div>
   `;
-}
 
-// Auto-save functionality (every 30 seconds)
-let autoSaveInterval;
-
-function startAutoSave() {
-  autoSaveInterval = setInterval(() => {
-    const formData = new FormData(document.getElementById('guestForm'));
-    const data = Object.fromEntries(formData);
-    localStorage.setItem('guestFormAutoSave', JSON.stringify(data));
-    console.log('Form auto-saved');
-  }, 30000);
-}
-
-function stopAutoSave() {
-  if (autoSaveInterval) {
-    clearInterval(autoSaveInterval);
+  // Auto-hide success messages after 5 seconds
+  if (type === 'success') {
+    setTimeout(() => {
+      alertDiv.innerHTML = '';
+    }, 5000);
   }
 }
 
-// Load auto-saved data if exists
-function loadAutoSave() {
-  const saved = localStorage.getItem('guestFormAutoSave');
-  if (saved && !isEditMode) {
-    const shouldRestore = confirm('Found auto-saved form data. Would you like to restore it?');
-    if (shouldRestore) {
-      const data = JSON.parse(saved);
-      Object.keys(data).forEach(key => {
-        const element = document.getElementById(key);
-        if (element) {
-          element.value = data[key];
-        }
-      });
-    }
-  }
-  localStorage.removeItem('guestFormAutoSave');
-}
-
-// Initialize auto-save
-if (!isEditMode) {
-  setTimeout(() => {
-    loadAutoSave();
-    startAutoSave();
-  }, 1000);
-}
-
-// Clear auto-save on successful submit
-document.getElementById('guestForm').addEventListener('submit', () => {
-  stopAutoSave();
-  localStorage.removeItem('guestFormAutoSave');
-});
+// Expose functions to window for global access
+window.validateRoomCapacity = validateRoomCapacity;
+window.calculateDueDate = calculateDueDate;
+window.handleFormSubmit = handleFormSubmit;
+window.showAlert = showAlert;
