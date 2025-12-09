@@ -61,8 +61,14 @@
                 <p><strong>Username:</strong> admin1</p>
                 <p><strong>Password:</strong> Admin@123</p>
                 <p><strong>Role:</strong> Primary Administrator</p>
-                <p><i class="fas fa-sign-in-alt"></i> 4 Total Logins</p>
-                <p><i class="fas fa-clock"></i> Last Login: 18/11/2025, 21:06:05</p>
+                <p>
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span id="admin1Logins">0</span> Total Logins
+                </p>
+                <p>
+                    <i class="fas fa-clock"></i>
+                    Last Login: <span id="admin1LastLogin">Never</span>
+                </p>
             </div>
 
             <div class="admin-card">
@@ -70,8 +76,14 @@
                 <p><strong>Username:</strong> admin2</p>
                 <p><strong>Password:</strong> Admin@456</p>
                 <p><strong>Role:</strong> Secondary Administrator</p>
-                <p><i class="fas fa-sign-in-alt"></i> 0 Total Logins</p>
-                <p><i class="fas fa-clock"></i> Last Login: Never</p>
+                <p>
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span id="admin2Logins">0</span> Total Logins
+                </p>
+                <p>
+                    <i class="fas fa-clock"></i>
+                    Last Login: <span id="admin2LastLogin">Never</span>
+                </p>
             </div>
         </div>
 
@@ -90,14 +102,8 @@
                             <th>Session Duration</th>
                         </tr>
                     </thead>
-                    <tbody id="loginHistoryBody">
-                        <tr>
-                            <td>1</td>
-                            <td>admin1</td>
-                            <td>18/11/2025, 21:06:05</td>
-                            <td>Active</td>
-                            <td>Active</td>
-                        </tr>
+                    <tbody id="loginHistoryTable">
+                        <!-- Rows are rendered by admin-profile.js -->
                     </tbody>
                 </table>
             </div>

@@ -131,6 +131,11 @@
       border-radius: 4px;
     }
 
+    .sharing-controls {
+      display: flex;
+      gap: 4px;
+    }
+
     /* Beds Grid - Individual Bed Slots */
     .beds-grid {
       display: grid;
@@ -204,6 +209,52 @@
         grid-template-columns: 1fr;
       }
     }
+
+    /* Building Sections */
+    .building-section {
+      margin-bottom: 50px;
+    }
+
+    .building-section h2 {
+      color: #333;
+      margin: 30px 0 20px 0;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #667eea;
+    }
+
+    /* Capacity Control Button Styles */
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 12px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 600;
+    }
+
+    .btn-sm:hover {
+      background: #764ba2;
+      transform: scale(1.1);
+    }
+
+    .btn-sm:active {
+      transform: scale(0.95);
+    }
+
+    /* Responsive: Stack on smaller screens */
+    @media (max-width: 768px) {
+      .sharing-controls {
+        gap: 3px;
+      }
+
+      .btn-sm {
+        padding: 3px 6px;
+        font-size: 11px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -232,21 +283,21 @@
       <p>View occupancy for each room with individual bed slots</p>
     </div>
 
-    <!-- Building 1 -->
-    <section class="form-container">
+    <!-- BUILDING 1 SECTION -->
+    <div class="building-section">
       <h2>Building-1</h2>
       <div id="building1Rooms" class="room-grid">
-        <!-- room-status.js will render room cards here -->
+        <!-- Building 1 rooms populated by room-status.js -->
       </div>
-    </section>
+    </div>
 
-    <!-- Building 2 -->
-    <section class="form-container">
+    <!-- BUILDING 2 SECTION -->
+    <div class="building-section">
       <h2>Building-2</h2>
       <div id="building2Rooms" class="room-grid">
-        <!-- room-status.js will render room cards here -->
+        <!-- Building 2 rooms populated by room-status.js -->
       </div>
-    </section>
+    </div>
   </div>
 
   <!-- Room details modal -->
