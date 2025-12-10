@@ -267,7 +267,7 @@ async getLoginHistory() {
         }
     },
 
-   // Get backups (keep only latest 1)
+   // Get backups (keep only latest 3)
 async getBackups() {
     if (!checkClient()) return [];
 
@@ -282,9 +282,9 @@ async getBackups() {
 
         const all = data || [];
 
-        // 2) If more than 1, delete the older ones
-        if (all.length > 1) {
-            const toDeleteIds = all.slice(1).map(row => row.id);
+        // 2) If more than 3, delete the older ones
+        if (all.length > 3) {
+            const toDeleteIds = all.slice(3).map(row => row.id);
             const { error: delError } = await supabase
                 .from("backups")
                 .delete()
@@ -295,8 +295,8 @@ async getBackups() {
             }
         }
 
-        // 3) Return latest 1 to UI
-        return all.slice(0, 1);
+        // 3) Return latest 3 to UI
+        return all.slice(0, 3);
     } catch (error) {
         console.error("❌ Error fetching backups:", error);
         return [];
