@@ -4,6 +4,9 @@
 
 let allGuests = [];
 
+// Cache for room capacity loaded from DB
+let dbRoomCapacity = {};
+
 // ============================================
 // Minimum Beds Per Sharing Type (FIXED)
 // ============================================
@@ -21,18 +24,52 @@ const MIN_CAPACITY_PER_SHARING = {
 // Per-Room Capacity Management
 // ============================================
 
-// Load per-room capacity from localStorage or use default
-function getRoomCapacity() {
+// Load per-room capacity from DB first, then localStorage, then default
+async function getRoomCapacity() {
+  // Return cached DB version if already loaded
+  if (Object.keys(dbRoomCapacity).length > 0) {
+    return dbRoomCapacity;
+  }
+
+  try {
+    // Try to load from DB first
+    const capacityRows = await DB.getRoomCapacity();
+    dbRoomCapacity = DB.convertRoomCapacityToMap(capacityRows);
+
+    // If DB has data, merge it with defaults and cache
+    if (Object.keys(dbRoomCapacity).length > 0) {
+      // Merge DB data with defaults (DB takes priority)
+      const merged = JSON.parse(JSON.stringify(window.DEFAULT_ROOM_CAPACITY || initializeDefaultCapacity()));
+      Object.keys(dbRoomCapacity).forEach(building => {
+        Object.keys(dbRoomCapacity[building]).forEach(roomNo => {
+          Object.keys(dbRoomCapacity[building][roomNo]).forEach(sharingType => {
+            merged[building][roomNo][sharingType] = dbRoomCapacity[building][roomNo][sharingType];
+          });
+        });
+      });
+      dbRoomCapacity = merged;
+      return merged;
+    }
+  } catch (error) {
+    console.warn('Error loading from DB, falling back to localStorage:', error);
+  }
+
+  // Fallback to localStorage
   try {
     const stored = localStorage.getItem('ROOM_CAPACITY');
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      dbRoomCapacity = parsed;
+      return parsed;
     }
   } catch (e) {
     console.warn('Failed to load stored room capacity:', e);
   }
-  // Fallback to default from config
-  return window.DEFAULT_ROOM_CAPACITY || initializeDefaultCapacity();
+
+  // Final fallback to default config
+  const defaultCap = window.DEFAULT_ROOM_CAPACITY || initializeDefaultCapacity();
+  dbRoomCapacity = defaultCap;
+  return defaultCap;
 }
 
 // Initialize default capacity based on ROOM_MAP
@@ -54,21 +91,6 @@ function initializeDefaultCapacity() {
   return defaultCap;
 }
 
-// Save per-room capacity to localStorage and DB
-async function saveRoomCapacity(capacityObj) {
-  try {
-    // Save to localStorage for instant UI update
-    localStorage.setItem('ROOM_CAPACITY', JSON.stringify(capacityObj));
-    
-    // Also save to DB settings table (optional, for persistence across devices)
-    if (window.DB && typeof DB.saveSettings === 'function') {
-      await DB.saveSettings('ROOM_CAPACITY', capacityObj);
-    }
-  } catch (e) {
-    console.error('Error saving room capacity:', e);
-  }
-}
-
 // Count occupied beds for a specific (building, room, sharing)
 function countGuests(building, roomNo, sharingType) {
   return allGuests.filter(g =>
@@ -81,23 +103,41 @@ function countGuests(building, roomNo, sharingType) {
 
 // Increase capacity for a specific (building, room, sharing) - max 5
 async function increaseCapacity(building, roomNo, sharingType) {
-  const roomCapacity = getRoomCapacity();
+  const roomCapacity = await getRoomCapacity();
   const currentValue = roomCapacity[building]?.[roomNo]?.[sharingType] || 1;
   
   if (currentValue < 5) {
-    roomCapacity[building][roomNo][sharingType] = currentValue + 1;
-    await saveRoomCapacity(roomCapacity);
-    showRoomCapacityNotification(`✓ ${building} ${roomNo} (${sharingType} Sharing): ${currentValue + 1} beds`, 'success');
-    await loadRoomStatus(); // Refresh room display
+    const newCapacity = currentValue + 1;
+    roomCapacity[building][roomNo][sharingType] = newCapacity;
+
+    try {
+      // Save to database first
+      await DB.upsertRoomCapacity({
+        building,
+        roomNo,
+        sharingType,
+        capacity: newCapacity,
+      });
+
+      // Update in-memory cache and localStorage
+      dbRoomCapacity = roomCapacity;
+      localStorage.setItem('ROOM_CAPACITY', JSON.stringify(roomCapacity));
+
+      showRoomCapacityNotification(`✓ ${building} ${roomNo} (${sharingType} Sharing): ${newCapacity} beds`, 'success');
+      await loadRoomStatus(); // Refresh room display
+    } catch (error) {
+      console.error('Error updating room capacity:', error);
+      showAlert('Failed to save bed change', 'danger');
+    }
   } else {
     alert(`Maximum 5 beds allowed for ${building} ${roomNo} (${sharingType} Sharing)`);
   }
 }
 
 // Decrease capacity for a specific (building, room, sharing)
-// ✅ NEW: Check minimum beds per sharing type + occupancy
+// ✅ Check minimum beds per sharing type + occupancy
 async function decreaseCapacity(building, roomNo, sharingType) {
-  const roomCapacity = getRoomCapacity();
+  const roomCapacity = await getRoomCapacity();
   const currentValue = roomCapacity[building]?.[roomNo]?.[sharingType] || 1;
   
   // Get minimum allowed for this sharing type
@@ -119,9 +159,26 @@ async function decreaseCapacity(building, roomNo, sharingType) {
   }
 
   roomCapacity[building][roomNo][sharingType] = newCapacity;
-  await saveRoomCapacity(roomCapacity);
-  showRoomCapacityNotification(`✓ ${building} ${roomNo} (${sharingType} Sharing): ${newCapacity} bed(s)`, 'success');
-  await loadRoomStatus(); // Refresh room display
+
+  try {
+    // Save to database first
+    await DB.upsertRoomCapacity({
+      building,
+      roomNo,
+      sharingType,
+      capacity: newCapacity,
+    });
+
+    // Update in-memory cache and localStorage
+    dbRoomCapacity = roomCapacity;
+    localStorage.setItem('ROOM_CAPACITY', JSON.stringify(roomCapacity));
+
+    showRoomCapacityNotification(`✓ ${building} ${roomNo} (${sharingType} Sharing): ${newCapacity} bed(s)`, 'success');
+    await loadRoomStatus(); // Refresh room display
+  } catch (error) {
+    console.error('Error updating room capacity:', error);
+    showAlert('Failed to save bed change', 'danger');
+  }
 }
 
 // Show temporary notification for capacity changes
@@ -192,18 +249,18 @@ async function loadRoomStatus() {
         // Only consider guests not vacated
         const activeGuests = allGuests.filter(g => g.roomVacate !== 'Yes');
 
-        renderBuilding('Building-1', 'building1Rooms', activeGuests);
-        renderBuilding('Building-2', 'building2Rooms', activeGuests);
+        await renderBuilding('Building-1', 'building1Rooms', activeGuests);
+        await renderBuilding('Building-2', 'building2Rooms', activeGuests);
     } catch (error) {
         console.error('Error loading room status:', error);
     }
 }
 
 // Render each building's room grid with sharing-wise sub-grids
-function renderBuilding(building, containerId, activeGuests) {
+async function renderBuilding(building, containerId, activeGuests) {
     const container = document.getElementById(containerId);
     const rooms = ROOM_MAP[building] || [];
-    const roomCapacity = getRoomCapacity();
+    const roomCapacity = await getRoomCapacity();
 
     let html = '';
 
@@ -324,8 +381,6 @@ function showBedDetails(building, roomNo, sharingType, bedSlot) {
     const modalBody = document.getElementById('roomModalBody');
 
     const label = SHARING_LABELS[sharingType];
-    const roomCapacity = getRoomCapacity();
-    const maxCapacity = roomCapacity[building]?.[roomNo]?.[sharingType] ?? 1;
     const guest = sharingGuests[bedSlot];
 
     if (!guest) {
@@ -430,12 +485,17 @@ window.onclick = function (event) {
     if (event.target === modal) closeRoomModal();
 };
 
-// Initialize room status on page load
+// Initialize room status on page load - fetch DB capacity first
 document.addEventListener('DOMContentLoaded', async () => {
     try {
+        // Load room capacity from DB and cache it
+        await getRoomCapacity();
+        
+        // Then load and display room status
         await loadRoomStatus();
     } catch (error) {
         console.error('Error initializing room status:', error);
+        showAlert('Error loading room status', 'danger');
     }
 });
 

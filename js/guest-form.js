@@ -7,6 +7,9 @@ let isEditMode = false;
 let currentGuestId = null;
 let allGuests = [];
 
+// Cache for room capacity loaded from DB
+let cachedRoomCapacity = null;
+
 // Map: building -> rooms (no floor column needed)
 const ROOM_MAP = {
   'Building-1': [
@@ -39,23 +42,45 @@ const SHARING_TYPE_DISPLAY = {
   3: '3 Sharing'
 };
 
-// ✅ Load per-room capacity from localStorage or use default
-function getRoomCapacity() {
-  try {
-    const stored = localStorage.getItem('ROOM_CAPACITY');
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.warn('Failed to load stored room capacity:', e);
+// ✅ Load per-room capacity from DB first, then localStorage, then default
+async function getRoomCapacity() {
+  // Return cached version if already loaded
+  if (cachedRoomCapacity) {
+    return cachedRoomCapacity;
   }
-  // Fallback to default from config
-  return window.DEFAULT_ROOM_CAPACITY || {};
+
+  try {
+    // Try to load from DB first
+    const capacityRows = await DB.getRoomCapacity();
+    const dbCapacity = DB.convertRoomCapacityToMap(capacityRows);
+    
+    // Merge with default: use DB values, fill gaps from config
+    cachedRoomCapacity = JSON.parse(JSON.stringify(window.DEFAULT_ROOM_CAPACITY || {}));
+    Object.keys(dbCapacity).forEach(building => {
+      Object.keys(dbCapacity[building]).forEach(roomNo => {
+        Object.keys(dbCapacity[building][roomNo]).forEach(sharingType => {
+          if (!cachedRoomCapacity[building]) cachedRoomCapacity[building] = {};
+          if (!cachedRoomCapacity[building][roomNo]) cachedRoomCapacity[building][roomNo] = {};
+          cachedRoomCapacity[building][roomNo][sharingType] = dbCapacity[building][roomNo][sharingType];
+        });
+      });
+    });
+    
+    return cachedRoomCapacity;
+  } catch (error) {
+    console.warn('Error loading room capacity from DB, using defaults:', error);
+    // Fallback to default config
+    cachedRoomCapacity = window.DEFAULT_ROOM_CAPACITY || {};
+    return cachedRoomCapacity;
+  }
 }
 
 // Initialize form
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    // Load room capacity from DB first
+    await getRoomCapacity();
+    
     // Load all guests from database
     allGuests = await DB.getGuests();
 
@@ -120,12 +145,12 @@ function loadRooms(building) {
     roomSelect.appendChild(option);
   });
 
-  // Clear previous validation
-  validateRoomCapacity();
+  // Clear previous validation (async)
+  validateRoomCapacity().catch(err => console.error('Error validating capacity:', err));
 }
 
 // ✅ VALIDATE ROOM CAPACITY - WITH PER-ROOM CHECKING
-function validateRoomCapacity() {
+async function validateRoomCapacity() {
   const roomNo = document.getElementById('roomNo').value;
   const sharingTypeDisplay = document.getElementById('sharingType').value; // Display name from dropdown
   const building = document.getElementById('building').value;
@@ -140,7 +165,7 @@ function validateRoomCapacity() {
   }
 
   // ✅ Get max capacity for THIS SPECIFIC room + sharing type
-  const roomCapacity = getRoomCapacity();
+  const roomCapacity = await getRoomCapacity();
   const sharingType = SHARING_TYPE_MAP[sharingTypeDisplay];
   const maxCapacity = roomCapacity[building]?.[roomNo]?.[sharingType] ?? 1;
 
@@ -296,13 +321,12 @@ function calculateDueDate() {
   }
 }
 
-
 // Handle form submission
 async function handleFormSubmit(e) {
   e.preventDefault();
 
   // Validate capacity before submission
-  if (!validateRoomCapacity()) {
+  if (!await validateRoomCapacity()) {
     showAlert('Cannot add guest - room is at capacity', 'danger');
     return;
   }
