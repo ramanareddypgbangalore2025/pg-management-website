@@ -1,0 +1,145 @@
+
+## 2. 📊 Database Tables Creation
+
+### Step 2.1: Open SQL Editor
+
+1. In Supabase dashboard, click **"SQL Editor"** in sidebar
+2. Click **"New query"**
+
+### Step 2.2: Create `guests` Table
+
+Copy and paste this SQL code, then click **"Run"**:
+
+```sql
+DROP TABLE IF EXISTS guests;
+
+CREATE TABLE guests (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    "joiningDate" DATE NOT NULL,
+    building TEXT NOT NULL,
+    "roomNo" TEXT NOT NULL,
+    "sharingType" INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    mobile TEXT NOT NULL,
+    "advancePayment" DECIMAL(10,2) NOT NULL,
+    "paymentAmount" DECIMAL(10,2) NOT NULL,
+    "monthlyPaymentStatus" TEXT NOT NULL,
+    "monthlyPaymentDate" DATE,
+    "upcomingPaymentDueDate" DATE,
+    "daysLeft" TEXT,
+    "roomVacate" TEXT DEFAULT 'No',
+    remarks TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE guests
+ADD COLUMN "isCurrentCycleClosed" boolean NOT NULL DEFAULT false;
+
+
+CREATE INDEX IF NOT EXISTS idx_guests_building ON guests(building);
+CREATE INDEX IF NOT EXISTS idx_guests_room ON guests("roomNo");
+CREATE INDEX IF NOT EXISTS idx_guests_status ON guests("monthlyPaymentStatus");
+CREATE INDEX IF NOT EXISTS idx_guests_vacate ON guests("roomVacate");
+
+ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all operations on guests" ON guests;
+
+CREATE POLICY "Allow all operations on guests"
+ON guests FOR ALL
+USING (true)
+WITH CHECK (true);
+
+
+✅ **Success**: You should see "Success. No rows returned"
+
+### Step 2.3: Create `login_history` Table
+
+Create a new query and run:
+
+```sql
+-- Create login history table
+CREATE TABLE login_history (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    username TEXT NOT NULL,
+    login_time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    logout_time TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create index for faster queries
+CREATE INDEX idx_login_username ON login_history(username);
+CREATE INDEX idx_login_time ON login_history(login_time DESC);
+
+-- Enable Row Level Security
+ALTER TABLE login_history ENABLE ROW LEVEL SECURITY;
+
+-- Create policy
+CREATE POLICY "Allow all operations on login_history" 
+ON login_history FOR ALL 
+USING (true) 
+WITH CHECK (true);
+```
+
+### Step 2.4: Create `backups` Table
+
+Create another new query and run:
+
+```sql
+-- Create backups table
+CREATE TABLE backups (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    backup_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    data JSONB NOT NULL,
+    type TEXT DEFAULT 'manual',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create index
+CREATE INDEX idx_backup_date ON backups(backup_date DESC);
+
+-- Enable Row Level Security
+ALTER TABLE backups ENABLE ROW LEVEL SECURITY;
+
+-- Create policy
+CREATE POLICY "Allow all operations on backups" 
+ON backups FOR ALL 
+USING (true) 
+WITH CHECK (true);
+```
+
+--Rooms capacity table--
+CREATE TABLE IF NOT EXISTS room_capacity (
+  id BIGSERIAL PRIMARY KEY,
+  building TEXT NOT NULL,
+  room_no TEXT NOT NULL,
+  sharing_type INTEGER NOT NULL,
+  capacity INTEGER NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(building, room_no, sharing_type)
+);
+
+CREATE INDEX idx_room_capacity_building ON room_capacity(building);
+
+-- Enable Row Level Security
+ALTER TABLE room_capacity ENABLE ROW LEVEL SECURITY;
+
+-- Create policy
+CREATE POLICY "Allow all operations on room_capacity" 
+ON room_capacity FOR ALL 
+USING (true) 
+WITH CHECK (true);
+
+---->
+
+### Step 2.5: Verify Tables
+
+1. Click **"Table Editor"** in sidebar
+2. You should see 3 tables:
+   - `guests`
+   - `login_history`
+   - `backups`
+   - room_capacity
+---
