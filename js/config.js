@@ -4,8 +4,8 @@
 // Replace these values with your actual Supabase project credentials
 
 const SUPABASE_CONFIG = {
-  url: 'https://temfpakqmqkdvdyhgetz.supabase.co', // Example: https://xyzcompany.supabase.co
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbWZwYWtxbXFrZHZkeWhnZXR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2OTgwNDgsImV4cCI6MjA4MDI3NDA0OH0.VKbNOzSqQDOb7o1_jvh0zIzRUIkwhznD1l-khiOv4fc', // Your anon/public key
+  url: 'https://cahsygrigqfxsfbsxpbb.supabase.co', // Example: https://xyzcompany.supabase.co
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhaHN5Z3JpZ3FmeHNmYnN4cGJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwNjQ1MjMsImV4cCI6MjA4MjY0MDUyM30.Uww8218wqQiKmgT359CR1Ez8ql2HtWFvrHG4cegJAlI', // Your anon/public key
 };
 
 // Hardcoded Admin Credentials
