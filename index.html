@@ -19,16 +19,24 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
-    <!-- Supabase -->
+    <!-- ===== SCRIPT LOADING ORDER - CRITICAL ===== -->
+    <!-- 1. Supabase library first -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- 2. Config second -->
     <script src="js/config.js"></script>
+    
+    <!-- 3. Supabase client third -->
     <script src="js/supabase-client.js"></script>
+    
+    <!-- 4. Initialize Supabase -->
     <script>
-        // Initialize Supabase before any query
         if (window.supabaseClient && window.supabaseClient.init) {
             window.supabaseClient.init();
+            console.log("✅ Supabase initialized on login page");
         }
     </script>
+    <!-- ===== END SCRIPT LOADING ORDER ===== -->
     
     <style>
         /* Mobile optimizations for login page */
@@ -119,6 +127,7 @@
         </div>
     </div>
 
+    <!-- 5. Auth script after Supabase is initialized -->
     <script src="js/auth.js"></script>
     
     <!-- Service Worker Registration for PWA -->
@@ -126,8 +135,8 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/service-worker.js')
-                    .then(reg => console.log('Service Worker registered'))
-                    .catch(err => console.log('Service Worker registration failed:', err));
+                    .then(reg => console.log('✅ Service Worker registered'))
+                    .catch(err => console.log('❌ Service Worker registration failed:', err));
             });
         }
     </script>
