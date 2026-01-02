@@ -1,3 +1,8 @@
+// ===== INITIALIZE DB FIRST =====
+if (!window.DB) {
+  console.warn("⏳ Waiting for DB to initialize...");
+  setTimeout(() => location.reload(), 2000);
+}
 // ============================================
 // Reports Module - FIXED: Filter by Payment Date
 // ============================================
